@@ -22,6 +22,7 @@ mix_up: 0.00000               # image mix-up (probability)
 # classes
 names:
   0: person
+other_names:
   1: bicycle
   2: car
   3: motorcycle

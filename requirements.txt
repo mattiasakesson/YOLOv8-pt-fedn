@@ -1,0 +1,6 @@
+torchvision
+torch
+tqdm
+opencv-python
+PyYAML
+fedn==0.26.0

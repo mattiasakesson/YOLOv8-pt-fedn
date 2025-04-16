@@ -1,59 +1,80 @@
-YOLOv8 re-implementation using PyTorch
+# YOLOv8 Re-Implementation Using PyTorch + FEDn (Fork)
 
-### Installation
+This repository is a **fork** of [jahongir7174/YOLOv8-pt](https://github.com/jahongir7174/YOLOv8-pt), a PyTorch re-implementation of YOLOv8.
 
+This version integrates support for **FEDn** (a federated learning framework).  
+Modifications may have been made — please refer to the commit history for details.  
+All code is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**, in accordance with the original project.
+
+---
+
+## 🔧 Installation
+
+Clone this repository and navigate to its root directory:
+
+```bash
+git clone <your-repo-url>
+cd <repo-folder>
 ```
-conda create -n YOLO python=3.8
-conda activate YOLO
-conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch-lts
-pip install opencv-python==4.5.5.64
-pip install PyYAML
-pip install tqdm
+
+Create and activate a Python virtual environment (recommended):
+
+```bash
+python -m venv venv
+source venv/bin/activate
 ```
 
-### Train
+Install dependencies:
 
-* Configure your dataset path in `main.py` for training
-* Run `bash main.sh $ --train` for training, `$` is number of GPUs
+```bash
+pip install -r requirements.txt
+```
 
-### Test
+---
 
-* Configure your dataset path in `main.py` for testing
-* Run `python main.py --test` for testing
+## 📁 Preprocessing
 
-### Results
+1. **Download the Wisard dataset with environment splits**  
+   _TODO: Add instructions or download link here._
 
-| Version | Epochs | Box mAP |                                                                                  Download |
-|:-------:|:------:|--------:|------------------------------------------------------------------------------------------:|
-|  v8_n   |  500   |    37.0 |                                                                [model](./weights/best.pt) |
-|  v8_n*  |  500   |    37.2 | [model](https://github.com/jahongir7174/YOLOv8-pt/releases/download/v0.0.1-alpha/v8_n.pt) |
-|  v8_s*  |  500   |    44.6 | [model](https://github.com/jahongir7174/YOLOv8-pt/releases/download/v0.0.1-alpha/v8_s.pt) |
-|  v8_m*  |  500   |    50.0 | [model](https://github.com/jahongir7174/YOLOv8-pt/releases/download/v0.0.1-alpha/v8_m.pt) |
-|  v8_l*  |  500   |    52.5 | [model](https://github.com/jahongir7174/YOLOv8-pt/releases/download/v0.0.1-alpha/v8_l.pt) |
-|  v8_x*  |  500   |    53.5 | [model](https://github.com/jahongir7174/YOLOv8-pt/releases/download/v0.0.1-alpha/v8_x.pt) |
+2. **Generate `train.txt` for each client**:
 
-* `*` means that weights are ported from original repo, see reference
-* In the official YOLOv8 code, mask annotation information is used, which leads to higher performance
+```bash
+python create_wisard_text_complete.py
+```
 
-### Dataset structure
+---
 
-    ├── COCO 
-        ├── images
-            ├── train2017
-                ├── 1111.jpg
-                ├── 2222.jpg
-            ├── val2017
-                ├── 1111.jpg
-                ├── 2222.jpg
-        ├── labels
-            ├── train2017
-                ├── 1111.txt
-                ├── 2222.txt
-            ├── val2017
-                ├── 1111.txt
-                ├── 2222.txt
+## 🧪 Set Up Studio Project (FEDn)
 
-#### Reference
+To train the model in a federated setting, create a studio project using FEDn.
 
-* https://github.com/ultralytics/yolov5
-* https://github.com/ultralytics/ultralytics
+Follow the official guide:  
+👉 [How to create a FEDn project](https://fedn.scaleoutsystems.com/)
+
+---
+
+## 🚀 Start FEDn Client
+
+Set the following environment variables in your terminal or kernel:
+
+```bash
+export PROJECT_URL=<REPLACE-WITH-YOUR-PROJECT-URL>
+export FEDN_AUTH_TOKEN=<REPLACE-WITH-YOUR-AUTH-TOKEN>
+export DATA_PATH=<REPLACE-WITH-YOUR-LOCAL-DATASET-PATH>
+```
+
+Then run:
+
+```bash
+python main_fedn.py
+```
+
+---
+
+## 📚 References
+
+- https://github.com/jahongir7174/YOLOv8-pt
+- https://github.com/ultralytics/yolov5
+- https://github.com/ultralytics/ultralytics
+- https://github.com/scaleoutsystems/fedn

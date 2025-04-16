@@ -13,8 +13,8 @@ All code is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)
 Clone this repository and navigate to its root directory:
 
 ```bash
-git clone <your-repo-url>
-cd <repo-folder>
+git clone https://github.com/mattiasakesson/YOLOv8-pt-fedn.git
+cd YOLOv8-pt-fedn
 ```
 
 Create and activate a Python virtual environment (recommended):

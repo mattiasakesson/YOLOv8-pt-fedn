@@ -1,4 +1,4 @@
-# YOLOv8 Re-Implementation Using PyTorch + FEDn (Fork)
+# YOLOv8 Re-Implementation Using PyTorch (Fork) + FEDn 
 
 This repository is a **fork** of [jahongir7174/YOLOv8-pt](https://github.com/jahongir7174/YOLOv8-pt), a PyTorch re-implementation of YOLOv8.
 

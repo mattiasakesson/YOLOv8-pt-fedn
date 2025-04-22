@@ -1,4 +1,4 @@
-# YOLOv8 Re-Implementation Using PyTorch + FEDn (Fork)
+# YOLOv8 Re-Implementation Using PyTorch (Fork) + FEDn 
 
 This repository is a **fork** of [jahongir7174/YOLOv8-pt](https://github.com/jahongir7174/YOLOv8-pt), a PyTorch re-implementation of YOLOv8.
 
@@ -13,8 +13,8 @@ All code is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)
 Clone this repository and navigate to its root directory:
 
 ```bash
-git clone <your-repo-url>
-cd <repo-folder>
+git clone https://github.com/mattiasakesson/YOLOv8-pt-fedn.git
+cd YOLOv8-pt-fedn
 ```
 
 Create and activate a Python virtual environment (recommended):

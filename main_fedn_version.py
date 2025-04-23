@@ -1,16 +1,85 @@
 import argparse
+import json
 import os
-
+import numpy as np
 import yaml
 from fedn.network.clients.fedn_client import ConnectToApiResult, FednClient
+from fedn.utils.helpers.helpers import save_metadata
 
 from trainer import Trainer
+from fedn_util import extract_weights_from_model, load_weights_into_model
 
 
 
 
 with open(os.path.join("utils", "args.yaml"), errors="ignore") as f:
     params = yaml.safe_load(f)
+
+class FEDnWrapper:
+
+    def __init__(self,trainer):
+        self.trainer = trainer
+
+    def train(self, weights, client_settings):
+
+        old_weights =  [val.cpu().numpy() for _, val in self.trainer.model.state_dict().items()]
+
+        load_weights_into_model(weights, self.trainer.model)
+        upd_weights =  [val.cpu().numpy() for _, val in self.trainer.model.state_dict().items()]
+        distance = np.sum([np.linalg.norm(a-b) for a,b in zip(old_weights,upd_weights)])
+        print("train distance: ", distance)
+        print("old state: ",  np.sum([np.linalg.norm(a) for a in old_weights]))
+        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
+
+        self.trainer.train()
+        out_model = extract_weights_from_model(self.trainer.model)
+        metadata = {
+            "training_metadata": {
+                # num_examples are mandatory
+                "num_examples": 1,  # len(train_loader.dataset),
+                "batch_size": self.trainer.train_loader.batch_size,
+                "epochs": 1,
+                "lr": self.trainer.optimizer.param_groups[0]["lr"],
+            }
+        }
+        outpath = "temp"
+        save_metadata(metadata, outpath)
+        with open(outpath + "-metadata", "r") as fh:
+            training_metadata = json.loads(fh.read())
+
+        os.unlink(outpath + "-metadata")
+        upd_weights =  [val.cpu().numpy() for _, val in self.trainer.model.state_dict().items()]
+        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
+
+        return out_model, training_metadata
+    
+    def validate(self,  weights):
+
+        old_weights =  [val.cpu().numpy() for _, val in self.trainer.model.state_dict().items()]
+        load_weights_into_model(weights, self.trainer.model)
+        upd_weights =  [val.cpu().numpy() for _, val in self.trainer.model.state_dict().items()]
+        distance = np.sum([np.linalg.norm(a-b) for a,b in zip(old_weights,upd_weights)])
+        print("val distance: ", distance)
+        print("old state: ",  np.sum([np.linalg.norm(a) for a in old_weights]))
+        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
+        m_pre, m_rec, map50, mean_ap = self.trainer.validate()
+
+        performance = {
+            "val_precision": m_pre,
+            "val_recall": m_rec,
+            "val_map50": map50,
+            "val_map": mean_ap,
+        }
+        upd_weights =  [val.cpu().numpy() for _, val in self.trainer.model.state_dict().items()]
+        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
+        return performance
+
+
+
+
+
+
+
 
 
 def main():
@@ -27,9 +96,10 @@ def main():
     args = parser.parse_args()
 
     trainer = Trainer(args, params)
+    fednwrapper = FEDnWrapper(trainer)
 
     fedn_client = FednClient(
-        train_callback=trainer.train, validate_callback=trainer.validate
+        train_callback=fednwrapper.train, validate_callback=fednwrapper.validate
     )
 
     name = "Tora"

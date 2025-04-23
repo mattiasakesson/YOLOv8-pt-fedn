@@ -8,7 +8,6 @@ import tqdm
 from fedn.utils.helpers.helpers import save_metadata
 
 from dataloader import get_dataloader
-from fedn_util import extract_weights_from_model, load_weights_into_model
 from nets import nn
 from utils import util
 
@@ -52,7 +51,7 @@ class Trainer:
         return optimizer
 
     def configure_scheduler(self):
-        TOTAL_EPOCHS = 1000
+        TOTAL_EPOCHS = 10
 
         def lr(x):
             return (1 - x / TOTAL_EPOCHS) * (1.0 - self.params["lrf"]) + self.params[
@@ -68,18 +67,10 @@ class Trainer:
             "lrf"
         ]
 
-    def train(self, weights, client_setting):
+    def train(self):
         print("trainer train starts")
         t0 = time.time()
-        old_weights =  [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-
-        load_weights_into_model(weights, self.model)
-        upd_weights =  [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-        distance = np.sum([np.linalg.norm(a-b) for a,b in zip(old_weights,upd_weights)])
-        print("train distance: ", distance)
-        print("old state: ",  np.sum([np.linalg.norm(a) for a in old_weights]))
-        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
-
+        
         num_batch = len(self.train_loader)
         epochs = int(np.ceil(self.args.local_updates / num_batch))
         print("epochs: ", epochs)
@@ -193,46 +184,20 @@ class Trainer:
 
         torch.cuda.empty_cache()
         # return ema.ema.state_dict()
-        out_model = extract_weights_from_model(self.model)
-        metadata = {
-            "training_metadata": {
-                # num_examples are mandatory
-                "num_examples": 1,  # len(train_loader.dataset),
-                "batch_size": self.train_loader.batch_size,
-                "epochs": 1,
-                "lr": self.optimizer.param_groups[0]["lr"],
-            }
-        }
-        outpath = "temp"
-        save_metadata(metadata, outpath)
-        with open(outpath + "-metadata", "r") as fh:
-            training_metadata = json.loads(fh.read())
-
-        os.unlink(outpath + "-metadata")
-        upd_weights =  [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
-
+        
         print("training done")
         t1 = time.time()
         print("time: ", t1 - t0)
 
-        return out_model, training_metadata
+    
 
     @torch.no_grad()
-    def validate(self, weights):
+    def validate(self):
         print(
             "validate start",
         )
         t0 = time.time()
-        old_weights =  [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-
-        load_weights_into_model(weights, self.model)
-        upd_weights =  [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-        distance = np.sum([np.linalg.norm(a-b) for a,b in zip(old_weights,upd_weights)])
-        print("val distance: ", distance)
-        print("old state: ",  np.sum([np.linalg.norm(a) for a in old_weights]))
-        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
-
+        
         #self.model.half()
         self.model.eval()
 
@@ -335,16 +300,8 @@ class Trainer:
         # Return results
         self.model.float()  # for training
 
-        performance = {
-            "val_precision": m_pre,
-            "val_recall": m_rec,
-            "val_map50": map50,
-            "val_map": mean_ap,
-        }
-        upd_weights =  [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-        print("new state: ",  np.sum([np.linalg.norm(a) for a in upd_weights]))
-
+        
         print("validation done")
         t1 = time.time()
         print("validation time: ", t1 - t0)
-        return performance
+        return m_pre, m_rec, map50, mean_ap

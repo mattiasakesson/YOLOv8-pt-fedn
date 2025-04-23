@@ -11,7 +11,7 @@ from utils import util
 
 
 class Trainer:
-    def __init__(self, args, params):
+    def __init__(self, args, params, data_path=None):
         self.args = args
         self.params = params
 
@@ -21,8 +21,9 @@ class Trainer:
 
         self.optimizer = self.configure_optimizer()
         self.scheduler = self.configure_scheduler()
-
-        data_path = os.getenv("DATA_PATH")
+        if not data_path:
+            data_path = os.getenv("DATA_PATH")
+        print("data_path: ", data_path)
         torch.multiprocessing.set_start_method("spawn", force=True)
         self.train_loader = get_dataloader(data_path, "train", args, params)
         self.val_loader = get_dataloader(data_path, "valid", args, params)

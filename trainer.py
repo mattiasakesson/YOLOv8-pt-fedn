@@ -1,11 +1,9 @@
-import json
 import os
 import time
 
 import numpy as np
 import torch
 import tqdm
-from fedn.utils.helpers.helpers import save_metadata
 
 from dataloader import get_dataloader
 from nets import nn
@@ -30,6 +28,7 @@ class Trainer:
         self.val_loader = get_dataloader(data_path, "valid", args, params)
 
         self.prev_iterations = 0
+        self.round_index = 0
 
     def configure_optimizer(self):
         accumulate = max(round(64 / self.args.batch_size), 1)
@@ -51,19 +50,18 @@ class Trainer:
         return optimizer
 
     def configure_scheduler(self):
-        TOTAL_EPOCHS = 10
-
+        
         def lr(x):
-            return (1 - x / TOTAL_EPOCHS) * (1.0 - self.params["lrf"]) + self.params[
+            return  (1 - min(x / self.args.epochs, 1)) * (1.0 - self.params["lrf"]) + self.params[
                 "lrf"
             ]
 
         return torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr, last_epoch=-1)
 
-    def lr_schedule(self, epoch):
+    def lr_schedule(self, roundindex):
         """Learning rate decay schedule."""
-        TOTAL_EPOCHS = 1000  # self.args.epochs  # Or use a class constant if you prefer
-        return (1 - epoch / TOTAL_EPOCHS) * (1.0 - self.params["lrf"]) + self.params[
+        
+        return (1 - min(roundindex / self.args.epochs, 1)) * (1.0 - self.params["lrf"]) + self.params[
             "lrf"
         ]
 
@@ -121,10 +119,10 @@ class Trainer:
                         if j == 0:
                             fp = [
                                 self.params["warmup_bias_lr"],
-                                y["initial_lr"] * self.lr_schedule(epoch),
+                                y["initial_lr"] * self.lr_schedule(self.round_index),
                             ]
                         else:
-                            fp = [0.0, y["initial_lr"] * self.lr_schedule(epoch)]
+                            fp = [0.0, y["initial_lr"] * self.lr_schedule(self.round_index)]
                         y["lr"] = np.interp(x, xp, fp)
                         if "momentum" in y:
                             fp = [
@@ -184,7 +182,7 @@ class Trainer:
 
         torch.cuda.empty_cache()
         # return ema.ema.state_dict()
-        
+        self.round_index += 1
         print("training done")
         t1 = time.time()
         print("time: ", t1 - t0)

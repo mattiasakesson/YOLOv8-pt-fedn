@@ -67,7 +67,7 @@ export DATA_PATH=<REPLACE-WITH-YOUR-LOCAL-DATASET-PATH>
 Then run:
 
 ```bash
-python main_fedn.py
+python main_fedn_version.py
 ```
 
 ---

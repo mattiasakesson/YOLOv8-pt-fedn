@@ -1,36 +1,14 @@
 import argparse
 import collections
-import csv
 import os
 
 import torch
 import yaml
 from trainer import Trainer
+from save_results import log_metrics
 
-exp_name = "airfield_fhl_ser"
-
-def log_metrics(round_id, metrics, filename='nono/step.csv'):
-    """
-    Appends metrics to a CSV file. Writes header if file does not exist.
-    
-    Args:
-        epoch (int): Current epoch number.
-        metrics (tuple): (precision, recall, mAP@50, mAP)
-        filename (str): Path to the CSV file.
-    """
-    file_exists = os.path.exists(filename)
-    with open(filename, 'a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['round', 'precision', 'recall', 'mAP@50', 'mAP'])
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow({
-            'round': str(round_id + 1).zfill(3),
-            'precision': f'{metrics[0]:.3f}',
-            'recall': f'{metrics[1]:.3f}',
-            'mAP@50': f'{metrics[2]:.3f}',
-            'mAP': f'{metrics[3]:.3f}'
-        })
-        f.flush()
+res_folder = 'results'
+exp_name = "airfield_fhl_ser_lr10.1"
 
 def aggregate(models, copy_non_floats_from=0):
     """
@@ -71,6 +49,8 @@ def main():
 
     with open(os.path.join("utils", "args.yaml"), errors="ignore") as f:
         params = yaml.safe_load(f)
+
+    params["lrf"] =0.1
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-size", default=640, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
@@ -78,8 +58,11 @@ def main():
     parser.add_argument("--epochs", default=100, type=int)
     parser.add_argument("--local_updates", default=25, type=int)
     args = parser.parse_args()
-    if not os.path.exists(exp_name):
-        os.makedirs(exp_name)
+    
+    if not os.path.exists(res_folder):
+        os.makedirs(res_folder)
+    if not os.path.exists(os.path.join(res_folder,exp_name)):
+        os.makedirs(os.path.join(res_folder,exp_name))
 
     trainers = {}
     for data_path in data_paths:
@@ -94,11 +77,13 @@ def main():
         for trainer in trainers:
             trainers[trainer].model.load_state_dict(global_model, strict=True)
             m_pre, m_rec, map50, mean_ap = trainers[trainer].validate()
+            learning_rate = trainers[trainer].optimizer.param_groups[0]["lr"]
             #val_res = [m_pre, m_rec, map50, mean_ap]
-            log_metrics(round, [m_pre, m_rec, map50, mean_ap], os.path.join(exp_name,trainer+'_step.csv'))
+            log_metrics(round, [m_pre, m_rec, map50, mean_ap, learning_rate], os.path.join(res_folder,exp_name,trainer+'_step.csv'))
 
             trainers[trainer].train()
             model_upd += [trainers[trainer].model.state_dict()]
+            print("lr: ", trainers[trainer].optimizer.param_groups[0]["lr"])
         global_model = aggregate(model_upd)
 
 

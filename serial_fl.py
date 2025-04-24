@@ -2,10 +2,12 @@ import argparse
 import collections
 import os
 
+import numpy as np
 import torch
 import yaml
 from trainer import Trainer
 from save_results import log_metrics
+import copy
 
 res_folder = 'results'
 exp_name = "airfield_fhl_ser_lr10.1"
@@ -76,15 +78,22 @@ def main():
         print("round: ", round)
         for trainer in trainers:
             trainers[trainer].model.load_state_dict(global_model, strict=True)
+            print("global model before training ", trainer , ": ", np.sum([np.sum(global_model[key]) for key in global_model]))
+
             m_pre, m_rec, map50, mean_ap = trainers[trainer].validate()
             learning_rate = trainers[trainer].optimizer.param_groups[0]["lr"]
             #val_res = [m_pre, m_rec, map50, mean_ap]
             log_metrics(round, [m_pre, m_rec, map50, mean_ap, learning_rate], os.path.join(res_folder,exp_name,trainer+'_step.csv'))
 
             trainers[trainer].train()
+            print("global model after training ", trainer , ": ", np.sum([np.sum(global_model[key]) for key in global_model]))
+
             model_upd += [trainers[trainer].model.state_dict()]
             print("lr: ", trainers[trainer].optimizer.param_groups[0]["lr"])
-        global_model = aggregate(model_upd)
+
+        print("global model before aggregation: ", np.sum([np.sum(global_model[key]) for key in global_model]))
+        global_model = copy.deepcopy(aggregate(model_upd))
+        print("global model after aggregation: ", np.sum([np.sum(global_model[key]) for key in global_model]))
 
 
         

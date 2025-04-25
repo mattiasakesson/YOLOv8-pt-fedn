@@ -10,7 +10,7 @@ from save_results import log_metrics
 import copy
 
 res_folder = 'results'
-exp_name = "airfield_fhl_ser_lr10.1"
+exp_name = "airfield_fhl_ser_lr-0.01-0.001-300"
 
 def aggregate(models, copy_non_floats_from=0):
     """
@@ -45,19 +45,23 @@ def aggregate(models, copy_non_floats_from=0):
 
 def main():
 
-    data_paths = ['/home/mattias/Documents/projects/Wisard_usecase/datasets/dataset_Airfield',
-                  '/home/mattias/Documents/projects/Wisard_usecase/datasets/dataset_FHL']
+    
     
 
     with open(os.path.join("utils", "args.yaml"), errors="ignore") as f:
         params = yaml.safe_load(f)
-
+    params["lr0"] =0.01
     params["lrf"] =0.1
+
+    dataset_path = params['dataset_path']
+    data_paths = [os.path.join(dataset_path,'dataset_Airfield'),
+                  os.path.join(dataset_path,'dataset_FHL')]
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-size", default=640, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--local_rank", default=0, type=int)
-    parser.add_argument("--epochs", default=100, type=int)
+    parser.add_argument("--epochs", default=300, type=int)
     parser.add_argument("--local_updates", default=25, type=int)
     args = parser.parse_args()
     
@@ -71,14 +75,13 @@ def main():
         name = data_path.split("/")[-1]
         trainers[name] = Trainer(args, params, data_path)
 
-    global_model = trainers[name].model.state_dict()
+    global_model = copy.deepcopy(trainers[name].model.state_dict())
     
-    for round in range(1000):
+    for round in range(2000):
         model_upd = []
         print("round: ", round)
         for trainer in trainers:
             trainers[trainer].model.load_state_dict(global_model, strict=True)
-            print("global model before training ", trainer , ": ", np.sum([np.sum(global_model[key]) for key in global_model]))
 
             m_pre, m_rec, map50, mean_ap = trainers[trainer].validate()
             learning_rate = trainers[trainer].optimizer.param_groups[0]["lr"]
@@ -86,14 +89,11 @@ def main():
             log_metrics(round, [m_pre, m_rec, map50, mean_ap, learning_rate], os.path.join(res_folder,exp_name,trainer+'_step.csv'))
 
             trainers[trainer].train()
-            print("global model after training ", trainer , ": ", np.sum([np.sum(global_model[key]) for key in global_model]))
 
             model_upd += [trainers[trainer].model.state_dict()]
             print("lr: ", trainers[trainer].optimizer.param_groups[0]["lr"])
 
-        print("global model before aggregation: ", np.sum([np.sum(global_model[key]) for key in global_model]))
         global_model = copy.deepcopy(aggregate(model_upd))
-        print("global model after aggregation: ", np.sum([np.sum(global_model[key]) for key in global_model]))
 
 
         

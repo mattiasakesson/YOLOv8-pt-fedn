@@ -47,6 +47,7 @@ class Trainer:
 
         self.prev_iterations = 0
         self.round_index = 0
+        self.usage_counter = np.zeros(len(self.train_loader.dataloader.dataset), dtype=int)
 
     def configure_optimizer(self):
         accumulate = max(round(64 / self.args.batch_size), 1)
@@ -105,7 +106,8 @@ class Trainer:
         self.optimizer.zero_grad()
 
         for _ in p_bar:
-            samples, targets, _ = next(self.train_loader)
+            samples, targets, _, indices = next(self.train_loader)
+            self.usage_counter[indices] += 1  # <-- update usage manually here
 
             x = self.prev_iterations
 
@@ -194,7 +196,7 @@ class Trainer:
         p_bar = tqdm.tqdm(
             self.val_loader, desc=("%10s" * 3) % ("precision", "recall", "mAP")
         )
-        for samples, targets, shapes in p_bar:
+        for samples, targets, shapes,_ in p_bar:
             samples = samples.cuda()
             targets = targets.cuda()
             #samples = samples.half()  # uint8 to fp16/32

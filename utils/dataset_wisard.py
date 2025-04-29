@@ -29,9 +29,9 @@ class Dataset(data.Dataset):
         # Albumentations (optional, only used if package is installed)
         self.albumentations = Albumentations()
 
+
     def __getitem__(self, index):
         index = self.indices[index]
-
         params = self.params
         mosaic = self.mosaic and random.random() < params['mosaic']
 
@@ -89,7 +89,7 @@ class Dataset(data.Dataset):
         sample = image.transpose((2, 0, 1))[::-1]
         sample = numpy.ascontiguousarray(sample)
 
-        return torch.from_numpy(sample), target, shapes
+        return torch.from_numpy(sample), target, shapes, index
 
     def __len__(self):
         return len(self.filenames)
@@ -180,10 +180,10 @@ class Dataset(data.Dataset):
 
     @staticmethod
     def collate_fn(batch):
-        samples, targets, shapes = zip(*batch)
+        samples, targets, shapes, indices = zip(*batch)  # <- unpack the extra index
         for i, item in enumerate(targets):
-            item[:, 0] = i  # add target image index
-        return torch.stack(samples, 0), torch.cat(targets, 0), shapes
+            item[:, 0] = i  # still assign batch index to targets
+        return torch.stack(samples, 0), torch.cat(targets, 0), shapes, torch.tensor(indices)
 
     @staticmethod
     def load_label(filenames):

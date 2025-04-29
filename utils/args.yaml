@@ -1,5 +1,5 @@
-lr0: 0.010                    # initial learning rate (SGD=1E-2, Adam=1E-3)
-lrf: 0.010                    # final OneCycleLR learning rate (lr0 * lrf)
+lr0: 0.0010                    # initial learning rate (SGD=1E-2, Adam=1E-3)
+lrf: 1.0                   # final OneCycleLR learning rate (lr0 * lrf)
 momentum: 0.93700000          # SGD momentum/Adam beta1
 weight_decay: 0.0005          # optimizer weight decay 5e-4
 warmup_epochs: 3.000          # warmup epochs
@@ -102,3 +102,6 @@ other_names:
   77: teddy bear
   78: hair drier
   79: toothbrush
+
+dataset_path: '/home/mattias/Documents/projects/Wisard_usecase/datasets'
+                 

@@ -9,6 +9,21 @@ from dataloader import get_dataloader
 from nets import nn
 from utils import util
 
+class PersistentDataLoader:
+        def __init__(self, dataloader):
+            self.dataloader = dataloader
+            self.iterator = iter(self.dataloader)
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            try:
+                return next(self.iterator)
+            except StopIteration:
+                self.iterator = iter(self.dataloader)
+                return next(self.iterator)
+
 
 class Trainer:
     def __init__(self, args, params, data_path=None):
@@ -21,11 +36,13 @@ class Trainer:
 
         self.optimizer = self.configure_optimizer()
         self.scheduler = self.configure_scheduler()
+        self.train_iter = None
         if not data_path:
             data_path = os.getenv("DATA_PATH")
         print("data_path: ", data_path)
         torch.multiprocessing.set_start_method("spawn", force=True)
-        self.train_loader = get_dataloader(data_path, "train", args, params)
+        #self.train_loader = get_dataloader(data_path, "train", args, params)
+        self.train_loader = PersistentDataLoader(get_dataloader(data_path, "train", args, params))
         self.val_loader = get_dataloader(data_path, "valid", args, params)
 
         self.prev_iterations = 0
@@ -65,124 +82,89 @@ class Trainer:
         return (1 - min(roundindex / self.args.epochs, 1)) * (1.0 - self.params["lrf"]) + self.params[
             "lrf"
         ]
+    
+    
 
     def train(self):
         print("trainer train starts")
         t0 = time.time()
-        
-        num_batch = len(self.train_loader)
-        epochs = int(np.ceil(self.args.local_updates / num_batch))
-        print("epochs: ", epochs)
-        print("prev_itterations: ", self.prev_iterations)
+
+        num_batch = len(self.train_loader.dataloader)  # OBS: .dataloader
         accumulate = max(round(64 / self.args.batch_size), 1)
         amp_scale = torch.amp.GradScaler("cuda")
         criterion = util.ComputeLoss(self.model, self.params)
-        num_warmup = max(round(self.params["warmup_epochs"] * num_batch), 1000)
         num_warmup = 1000
-        # print("num_warmup: ", num_warmup)
 
-        updates = 0
-        done = False
+        self.model.train()
         warm_up = False
-        for epoch in range(epochs):
-            print("epoch: ", epoch, "/", epochs)
-            self.model.train()
 
-            if self.args.epochs - epoch == 10:
-                self.train_loader.dataset.mosaic = False
+        print(("\n" + "%10s" * 5) % ("updates", "memory", "warm_up", "x", "loss"))
 
-            m_loss = util.AverageMeter()
+        p_bar = tqdm.tqdm(range(self.args.local_updates))
 
-            p_bar = enumerate(self.train_loader)
+        self.optimizer.zero_grad()
 
-            print(("\n" + "%10s" * 5) % ("epoch", "memory", "warm_up", "x", "loss"))
+        for _ in p_bar:
+            samples, targets, _ = next(self.train_loader)
 
-            p_bar = tqdm.tqdm(p_bar, total=num_batch)  # progress bar
+            x = self.prev_iterations
 
-            self.optimizer.zero_grad()
+            samples = samples.cuda().float() / 255
+            targets = targets.cuda()
 
-            for i, (samples, targets, _) in p_bar:
-                x = i + num_batch * epoch + self.prev_iterations  # number of iterations
+            # Warmup
+            if x <= num_warmup:
+                warm_up = True
+                xp = [0, num_warmup]
+                fp = [1, 64 / self.args.batch_size]
+                accumulate = max(1, np.interp(x, xp, fp).round())
+                for j, y in enumerate(self.optimizer.param_groups):
+                    y.setdefault("initial_lr", y["lr"])
+                    if j == 0:
+                        fp = [self.params["warmup_bias_lr"], y["initial_lr"] * self.lr_schedule(self.round_index)]
+                    else:
+                        fp = [0.0, y["initial_lr"] * self.lr_schedule(self.round_index)]
+                    y["lr"] = np.interp(x, xp, fp)
+                    if "momentum" in y:
+                        fp = [self.params["warmup_momentum"], self.params["momentum"]]
+                        y["momentum"] = np.interp(x, xp, fp)
 
-                # print("i: ", i, "x: ", x)
-                samples = samples.cuda().float() / 255
-                targets = targets.cuda()
+            # Forward
+            with torch.amp.autocast("cuda"):
+                outputs = self.model(samples)
+            loss = criterion(outputs, targets)
 
-                # Warmup
+            loss *= self.args.batch_size
 
-                if x <= num_warmup:
-                    warm_up = True
-                    xp = [0, num_warmup]
-                    fp = [1, 64 / self.args.batch_size]
-                    accumulate = max(1, np.interp(x, xp, fp).round())
-                    for j, y in enumerate(self.optimizer.param_groups):
-                        y.setdefault("initial_lr", y["lr"])  # store if missing
-                        if j == 0:
-                            fp = [
-                                self.params["warmup_bias_lr"],
-                                y["initial_lr"] * self.lr_schedule(self.round_index),
-                            ]
-                        else:
-                            fp = [0.0, y["initial_lr"] * self.lr_schedule(self.round_index)]
-                        y["lr"] = np.interp(x, xp, fp)
-                        if "momentum" in y:
-                            fp = [
-                                self.params["warmup_momentum"],
-                                self.params["momentum"],
-                            ]
-                            y["momentum"] = np.interp(x, xp, fp)
+            amp_scale.scale(loss).backward()
 
-                # Forward
-                with torch.amp.autocast("cuda"):
-                    outputs = self.model(samples)  # forward
-                loss = criterion(outputs, targets)
+            if x % accumulate == 0:
+                amp_scale.unscale_(self.optimizer)
+                util.clip_gradients(self.model)
+                amp_scale.step(self.optimizer)
+                amp_scale.update()
+                self.optimizer.zero_grad()
+                if self.ema:
+                    self.ema.update(self.model)
 
-                m_loss.update(loss.item(), samples.size(0))
-
-                loss *= self.args.batch_size  # loss scaled by batch_size
-                # loss *= args.world_size  # gradient averaged between devices in DDP mode
-
-                # Backward
-                amp_scale.scale(loss).backward()
-
-                # Optimize
-                if x % accumulate == 0:
-                    # print("accumalate model")
-                    amp_scale.unscale_(self.optimizer)  # unscale gradients
-                    util.clip_gradients(self.model)  # clip gradients
-                    amp_scale.step(self.optimizer)  # optimizer.step
-                    amp_scale.update()
-                    self.optimizer.zero_grad()
-                    if self.ema:
-                        self.ema.update(self.model)
-
-                # Log
-
-                memory = f"{torch.cuda.memory_reserved() / 1e9:.3g}G"  # (GB)
-                s = ("%10s" * 3 + "%10.4g" * 2) % (
-                    f"{epoch + 1}/{self.args.epochs}",
+            # Update progress bar
+            memory = f"{torch.cuda.memory_reserved() / 1e9:.3g}G"
+            p_bar.set_description(
+                ("%10s" * 3 + "%10.4g" * 2)
+                % (
+                    f"{self.prev_iterations%self.args.local_updates + 1}/{self.args.local_updates}",  # Model updates progress
                     memory,
                     str(warm_up),
                     x,
-                    m_loss.avg,
+                    loss.item(),
                 )
-                p_bar.set_description(s)
+            )
 
-                del loss
-                del outputs
-                self.prev_iterations += 1
-                updates += 1
-                if updates >= self.args.local_updates:
-                    done = True
-                    break
+            self.prev_iterations += 1
 
-            # Scheduler
-            self.scheduler.step()
-            if done:
-                break
+        self.scheduler.step()
 
         torch.cuda.empty_cache()
-        # return ema.ema.state_dict()
         self.round_index += 1
         print("training done")
         t1 = time.time()

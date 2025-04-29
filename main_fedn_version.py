@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import uuid
 import numpy as np
 import yaml
 from fedn.network.clients.fedn_client import ConnectToApiResult, FednClient
@@ -87,12 +88,16 @@ def main():
     print("project_url: ", project_url)
     client_token = os.getenv("FEDN_AUTH_TOKEN")
     print("client_token: ", client_token)
+
+    data_path = os.getenv("DATA_PATH")
+    name = data_path.split("/")[-1]
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-size", default=640, type=int)
     parser.add_argument("--batch-size", default=32, type=int)
     parser.add_argument("--local_rank", default=0, type=int)
-    parser.add_argument("--epochs", default=500, type=int)
-    parser.add_argument("--local_updates", default=25, type=int)
+    parser.add_argument("--epochs", default=1000, type=int)
+    parser.add_argument("--local_updates", default=100, type=int)
     args = parser.parse_args()
 
     trainer = Trainer(args, params)
@@ -102,12 +107,11 @@ def main():
         train_callback=fednwrapper.train, validate_callback=fednwrapper.validate
     )
 
-    name = "Tora"
 
     fedn_client.set_name(name)
 
-    # client_id = str(uuid.uuid4())
-    client_id = "214"
+    client_id = str(uuid.uuid4())
+    #client_id = "214"
     fedn_client.set_client_id(client_id)
     print(client_id)
     controller_config = {

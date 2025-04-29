@@ -38,7 +38,7 @@ class FEDnWrapper:
             "training_metadata": {
                 # num_examples are mandatory
                 "num_examples": 1,  # len(train_loader.dataset),
-                "batch_size": self.trainer.train_loader.batch_size,
+                "batch_size": 32,
                 "epochs": 1,
                 "lr": self.trainer.optimizer.param_groups[0]["lr"],
             }

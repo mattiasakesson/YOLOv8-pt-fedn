@@ -269,7 +269,52 @@ class Dataset(data.Dataset):
         torch.save(x, path)
         print("ob/b: ", numpy.round(ob/ib,4))
         return x
+    def load_single_sample(self, image_path: str, label_path: str):
+        """
+        Load a single image and its labels (YOLO format) without augmentations.
+        Returns:
+            image (torch.Tensor): CHW format RGB image.
+            target (torch.Tensor): Tensor with shape (n_boxes, 6), where [:, 1:] = [class, x_center, y_center, width, height] normalized.
+        """
+        # Load image
+        image = cv2.imread(image_path)
+        assert image is not None, f"Image not found: {image_path}"
+        h, w = image.shape[:2]
 
+        # Resize with padding
+        image_resized, ratio, pad = resize(image, self.input_size, augment=False)
+
+        # Load label
+        if os.path.isfile(label_path):
+            with open(label_path) as f:
+                label = [x.split() for x in f.read().strip().splitlines() if len(x)]
+                label = numpy.array(label, dtype=numpy.float32)
+        else:
+            label = numpy.zeros((0, 5), dtype=numpy.float32)
+
+        # Adjust labels for resizing
+        if label.size:
+            label[:, 1] = label[:, 1] * w * ratio[0] + pad[0]  # x_center
+            label[:, 2] = label[:, 2] * h * ratio[1] + pad[1]  # y_center
+            label[:, 3] = label[:, 3] * w * ratio[0]           # width
+            label[:, 4] = label[:, 4] * h * ratio[1]           # height
+
+            # Renormalize to resized image size
+            label[:, 1] /= image_resized.shape[1]
+            label[:, 2] /= image_resized.shape[0]
+            label[:, 3] /= image_resized.shape[1]
+            label[:, 4] /= image_resized.shape[0]
+
+        # To tensor
+        nl = len(label)
+        target = torch.zeros((nl, 6))
+        if nl:
+            target[:, 1:] = torch.from_numpy(label)
+
+        # Convert image to CHW RGB and to torch tensor
+        sample = image_resized.transpose((2, 0, 1))[::-1]
+        sample = numpy.ascontiguousarray(sample)
+        return torch.from_numpy(sample), target
 
 def wh2xy(x, w=640, h=640, pad_w=0, pad_h=0):
     # Convert nx4 boxes

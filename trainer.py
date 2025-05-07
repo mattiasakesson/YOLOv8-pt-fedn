@@ -26,7 +26,7 @@ class PersistentDataLoader:
 
 
 class Trainer:
-    def __init__(self, args, params, data_path=None):
+    def __init__(self, args, params, data_path=None, validation_mode=True, trainer_mode=True):
         self.args = args
         self.params = params
 
@@ -34,20 +34,24 @@ class Trainer:
         self.model = nn.yolo_v8_n(len(params["names"].values())).to(self.device)
         self.ema = util.EMA(self.model)
 
-        self.optimizer = self.configure_optimizer()
-        self.scheduler = self.configure_scheduler()
-        self.train_iter = None
+        
         if not data_path:
             data_path = os.getenv("DATA_PATH")
         print("data_path: ", data_path)
         torch.multiprocessing.set_start_method("spawn", force=True)
         #self.train_loader = get_dataloader(data_path, "train", args, params)
-        self.train_loader = PersistentDataLoader(get_dataloader(data_path, "train", args, params))
-        self.val_loader = get_dataloader(data_path, "valid", args, params)
+        if trainer_mode:
+            self.optimizer = self.configure_optimizer()
+            self.scheduler = self.configure_scheduler()
+            self.train_iter = None
+            self.train_loader = PersistentDataLoader(get_dataloader(data_path, "train", args, params))
+            self.usage_counter = np.zeros(len(self.train_loader.dataloader.dataset), dtype=int)
+            self.prev_iterations = 0
+            self.round_index = 0
+        if validation_mode:
+            self.val_loader = get_dataloader(data_path, "valid", args, params, num_workers=0)
 
-        self.prev_iterations = 0
-        self.round_index = 0
-        self.usage_counter = np.zeros(len(self.train_loader.dataloader.dataset), dtype=int)
+        
 
     def configure_optimizer(self):
         accumulate = max(round(64 / self.args.batch_size), 1)
@@ -87,10 +91,11 @@ class Trainer:
     
 
     def train(self):
+        torch.cuda.empty_cache()
+
         print("trainer train starts")
         t0 = time.time()
 
-        num_batch = len(self.train_loader.dataloader)  # OBS: .dataloader
         accumulate = max(round(64 / self.args.batch_size), 1)
         amp_scale = torch.amp.GradScaler("cuda")
         criterion = util.ComputeLoss(self.model, self.params)
@@ -104,6 +109,7 @@ class Trainer:
         p_bar = tqdm.tqdm(range(self.args.local_updates))
 
         self.optimizer.zero_grad()
+        m_loss = util.AverageMeter()
 
         for _ in p_bar:
             samples, targets, _, indices = next(self.train_loader)
@@ -135,6 +141,7 @@ class Trainer:
             with torch.amp.autocast("cuda"):
                 outputs = self.model(samples)
             loss = criterion(outputs, targets)
+            m_loss.update(loss.item(), samples.size(0))
 
             loss *= self.args.batch_size
 
@@ -158,7 +165,7 @@ class Trainer:
                     memory,
                     str(warm_up),
                     x,
-                    loss.item(),
+                    m_loss.avg,
                 )
             )
 
@@ -176,6 +183,7 @@ class Trainer:
 
     @torch.no_grad()
     def validate(self):
+        torch.cuda.empty_cache()
         print(
             "validate start",
         )

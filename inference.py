@@ -203,14 +203,10 @@ def main():
     model_path = "/home/mattias/Documents/projects/YOLOv8-pt-fedn/downloaded_models/all_clients_100mu_best_val_map50.npz"
      
     load_weights_from_path_into_model(model_path, model)
-    #w = torch.load("results/modelstates/modelstate_443")
-    #model.state_dict = w
     model.eval()
 
-
-    image_folder = 'uppsalaoffice'
     image_folder = '/home/mattias/Documents/projects/Wisard_usecase/datasets/dataset_Airfield/valid/images'
-    include_label = True
+    include_label = False
     filenames = sorted([os.path.join(image_folder, ex) for ex in os.listdir(image_folder)])
     input_size = 640
 

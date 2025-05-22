@@ -19,7 +19,21 @@ def load_weights_into_model(weights, model):
     state_dict = collections.OrderedDict({key: torch.tensor(x) for key, x in params_dict})
     model.load_state_dict(state_dict, strict=True)
 
+def load_weights_from_path_into_model(path, model):
+    
+    weights = helper.load(path)
+    params_dict = zip(model.state_dict().keys(), weights)
+    state_dict = collections.OrderedDict({key: torch.tensor(x) for key, x in params_dict})
+    model.load_state_dict(state_dict, strict=True)
 
+
+def save_weights_from_model(model,path):
+    # Convert from pytorch weights format numpy array
+    updated_weights = [val.cpu().numpy() for _, val in model.state_dict().items()]
+    helper.save(updated_weights, path)
+   
+
+    
 
 
 def extract_weights_from_model(model):

@@ -49,7 +49,7 @@ class Trainer:
             self.prev_iterations = 0
             self.round_index = 0
         if validation_mode:
-            self.val_loader = get_dataloader(data_path, "valid", args, params, num_workers=0)
+            self.val_loader = get_dataloader(data_path, "valid", args, params, num_workers=8)
 
         
 
@@ -182,7 +182,7 @@ class Trainer:
     
 
     @torch.no_grad()
-    def validate(self):
+    def validate(self, val_model, treshold = 0.5):
         torch.cuda.empty_cache()
         print(
             "validate start",
@@ -190,7 +190,7 @@ class Trainer:
         t0 = time.time()
         
         #self.model.half()
-        self.model.eval()
+        val_model.eval()
 
         # Configure
         iou_v = torch.linspace(0.5, 0.95, 10).cuda()  # iou vector for mAP@0.5:0.95
@@ -211,13 +211,13 @@ class Trainer:
             samples = samples / 255  # 0 - 255 to 0.0 - 1.0
             _, _, height, width = samples.shape  # batch size, channels, height, width
             # Inference
-            outputs = self.model(samples)
+            outputs = val_model(samples)
 
             # NMS
             targets[:, 2:] *= torch.tensor(
                 (width, height, width, height)
             ).cuda()  # to pixels
-            outputs = util.non_max_suppression(outputs, 0.001, 0.65)
+            outputs = util.non_max_suppression(outputs, treshold, 0.65)
 
             # Metrics
             for i, output in enumerate(outputs):
@@ -289,10 +289,13 @@ class Trainer:
         print("%10.3g" * 3 % (m_pre, m_rec, mean_ap))
 
         # Return results
-        self.model.float()  # for training
+        val_model.float()  # for training
 
         
         print("validation done")
         t1 = time.time()
         print("validation time: ", t1 - t0)
         return m_pre, m_rec, map50, mean_ap
+    
+
+    
